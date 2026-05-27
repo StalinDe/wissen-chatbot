@@ -20,7 +20,6 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     message_body = Body.strip().lower()
     
     response_text = ""
-    # Nueva variable para la URL de la imagen (por defecto vacía)
     media_url = None 
 
     if "hola" in message_body or "inicio" in message_body or "buenos dias" in message_body:
@@ -67,7 +66,7 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "Aquí te comparto la imagen con todos los detalles para tu depósito o transferencia. 👆\n\n"
             "🚨 *Paso Final:* Una vez realizado el pago, envía la foto del comprobante y tus nombres completos al WhatsApp que aparece en la imagen."
         )
-        media_url = "https://ejemplo.com/tu_imagen_de_cuentas.jpg" 
+        media_url = "https://github.com/StalinDe/wissen-chatbot/blob/main/img/cuentas-wissen.jpeg?raw=true" 
         
     elif "2" in message_body or "certi" in message_body:
         response_text = (
