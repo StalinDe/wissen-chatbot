@@ -1,5 +1,16 @@
+import os
 from fastapi import FastAPI, Form, Response
+from dotenv import load_dotenv
+from supabase import create_client, Client
 import uvicorn
+
+# 1. Cargar variables de entorno
+load_dotenv()
+
+# 2. Inicializar cliente de Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI(
     title="Chatbot Wissen Webhook",
@@ -12,13 +23,27 @@ def read_root():
     return {
         "status": "online",
         "project": "Chatbot Institucional Wissen",
-        "stage": "Pilot - Matriculación (Con Imágenes)"
+        "stage": "Pilot - Matriculación (Con Supabase)"
     }
 
 @app.post("/webhook")
 async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     message_body = Body.strip().lower()
+    # Limpiamos el formato de Twilio para obtener solo el número
+    numero_remitente = From.replace("whatsapp:", "") 
     
+    # ==========================================
+    # 3. BLOQUE DE REGISTRO EN SUPABASE (LOGS)
+    # ==========================================
+    try:
+        supabase.table("logs").insert({
+            "telefono": numero_remitente,
+            "mensaje_recibido": message_body
+        }).execute()
+    except Exception as e:
+        print(f"Error al guardar log en Supabase: {e}")
+    # ==========================================
+
     response_text = ""
     media_url = None 
 
