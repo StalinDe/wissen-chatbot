@@ -8,3 +8,6 @@ __pycache__/
 
 # Variables de entorno
 .env
+
+# Credenciales
+dialogflow-credenciales.json
