@@ -63,7 +63,8 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     if intencion == "Default Welcome Intent":
         response_text = (
             "¡Hola! Bienvenido al asistente virtual del Instituto Wissen. 🤖📚\n\n"
-            "¿En qué te puedo ayudar hoy? Escribe con tus propias palabras qué necesitas, por ejemplo:\n"
+            "⚖️ *Aviso de Privacidad:* Al continuar interactuando con este chat, autorizas al Instituto Wissen el tratamiento de tus datos personales (número de teléfono e historial de consultas) de acuerdo con la Ley Orgánica de Protección de Datos Personales (LOPDP), con fines estrictamente informativos y de admisión.\n\n"
+            "¿En qué te puedo ayudar hoy? Escribe con tus propias palabras, por ejemplo:\n"
             "👉 _'Quiero información para matricularme'_\n"
             "👉 _'Necesito sacar un certificado'_\n"
             "👉 _'Quiero retirar una materia'_"
