@@ -1,29 +1,30 @@
 import os
-from fastapi import FastAPI, Form, Response
+from fastapi import FastAPI, Request, Response
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.cloud import dialogflow
 import uvicorn
 
-# 1. Cargar variables de entorno
+# --- 1. CONFIGURACIÓN INICIAL Y ENTORNO ---
 load_dotenv()
 
-# 2. Inicializar cliente de Supabase
+# Inicializar Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 3. Configuración de Dialogflow
+# Configuración de Dialogflow
 DIALOGFLOW_PROJECT_ID = os.getenv("DIALOGFLOW_PROJECT_ID")
 session_client = dialogflow.SessionsClient()
 
+# Instancia de FastAPI
 app = FastAPI(
     title="Chatbot Wissen Webhook",
     description="Backend con IA para la guía de trámites institucionales",
     version="3.0.0"
 )
 
-# --- FUNCIÓN PARA CONSULTAR A LA IA ---
+# --- 2. MOTOR COGNITIVO DE DIALOGFLOW ---
 def detectar_intencion(project_id, session_id, texto, language_code="es"):
     try:
         session = session_client.session_path(project_id, session_id)
@@ -38,29 +39,32 @@ def detectar_intencion(project_id, session_id, texto, language_code="es"):
         print(f"Error conectando con Dialogflow: {e}")
         return "Error"
 
+# --- 3. ENDPOINT PRINCIPAL - TWILIO WEBHOOK ---
 @app.post("/webhook")
-async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
-    message_body = Body.strip()
-    numero_remitente = From.replace("whatsapp:", "") 
+async def twilio_webhook(request: Request):
+    # Capturar datos de entrada
+    form_data = await request.form()
+    texto = form_data.get("Body", "").strip()
+    numero_usuario = form_data.get("From", "")
     
-    # --- REGISTRO EN SUPABASE (LOGS) ---
+    # Registro de auditoría en Base de Datos en Supabase
     try:
         supabase.table("logs").insert({
-            "telefono": numero_remitente,
-            "mensaje_recibido": message_body
+            "numero": numero_usuario,
+            "mensaje": texto
         }).execute()
     except Exception as e:
-        print(f"Error al guardar log en Supabase: {e}")
+        print(f"Error al guardar en Supabase: {e}")
 
+    # Variables de respuesta por defecto
     response_text = ""
     media_url = None 
 
-    # --- CONSULTA A DIALOGFLOW ---
-    intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_remitente, message_body)
+    # Consultar a la Inteligencia Artificial
+    intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_usuario, texto)
     print(f"La IA detectó la intención: {intencion}")
 
-    # --- RUTEO DE INTENCIONES ---
-    
+    # --- 4. ÁRBOL DE DECISIONES Y LÓGICA DE NEGOCIO ---
     if intencion == "Default Welcome Intent":
         response_text = (
             "¡Hola! Bienvenido al asistente virtual del Instituto Wissen. 🤖📚\n\n"
@@ -147,8 +151,7 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "Por favor, intenta decirlo de otra forma o escribe *'Inicio'* para ver el menú principal."
         )
 
-
-    # --- CONSTRUCCIÓN DE RESPUESTA XML ---
+    # --- 5. CONSTRUCCIÓN DE RESPUESTA XML PARA TWILIO ---
     if media_url:
         twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -165,5 +168,6 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     
     return Response(content=twiml_response, media_type="application/xml")
 
+# --- 6. ARRANQUE DEL SERVIDOR ---
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
