@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Form, Response
+from fastapi import FastAPI, Form, Response, Request
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.cloud import dialogflow
@@ -39,25 +39,31 @@ def detectar_intencion(project_id, session_id, texto, language_code="es"):
         return "Error"
 
 @app.post("/webhook")
-async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
-    message_body = Body.strip()
-    numero_remitente = From.replace("whatsapp:", "") 
+async def twilio_webhook(request: Request):
+    form_data = await request.form()
+    texto = form_data.get("Body", "").strip()
+    numero_usuario = form_data.get("From", "")
     
-    # --- REGISTRO EN SUPABASE (LOGS) ---
+    intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_usuario, texto)
+    print(f"La IA detectó la intención: {intencion}")
+
     try:
-        supabase.table("logs").insert({
-            "telefono": numero_remitente,
-            "mensaje_recibido": message_body
+        usuario = supabase.table("usuarios").select("telefono").eq("telefono", numero_usuario).execute()
+        if not usuario.data:
+            supabase.table("usuarios").insert({"telefono": numero_usuario}).execute()
+            print("Nuevo lead registrado en la tabla usuarios.")
+
+        supabase.table("interacciones").insert({
+            "telefono": numero_usuario,
+            "mensaje": texto,
+            "intencion": intencion
         }).execute()
+        
     except Exception as e:
-        print(f"Error al guardar log en Supabase: {e}")
+        print(f"Error al guardar en Supabase: {e}")
 
     response_text = ""
-    media_url = None 
-
-    # --- CONSULTA A DIALOGFLOW ---
-    intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_remitente, message_body)
-    print(f"La IA detectó la intención: {intencion}")
+    media_url = None
 
     # --- LÓGICA BASADA EN INTENCIONES (IA) ---
     if intencion == "Default Welcome Intent":
