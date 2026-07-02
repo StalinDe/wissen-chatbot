@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Form, Response
+from fastapi import FastAPI, Form, Response, Request
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.cloud import dialogflow
@@ -8,19 +8,19 @@ import uvicorn
 # --- 1. CONFIGURACIÓN INICIAL Y ENTORNO ---
 load_dotenv()
 
-# -- Inicializar Supabase --
+# Inicializar Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# -- Configuración de Dialogflow --
+# Configuración de Dialogflow
 DIALOGFLOW_PROJECT_ID = os.getenv("DIALOGFLOW_PROJECT_ID")
 session_client = dialogflow.SessionsClient()
 
-# -- Instancia de FastAPI --
+# Instancia de FastAPI
 app = FastAPI(
     title="Chatbot Wissen Webhook",
-    description="Conexion con IA para la guía de trámites institucionales",
+    description="Backend con IA para la guía de trámites institucionales",
     version="3.0.0"
 )
 
@@ -39,25 +39,24 @@ def detectar_intencion(project_id, session_id, texto, language_code="es"):
         print(f"Error conectando con Dialogflow: {e}")
         return "Error"
 
-# --- 3. ENDPOINT PRINCIPAL <-> TWILIO WEBHOOK ---
+# --- 3. ENDPOINT PRINCIPAL - TWILIO WEBHOOK ---
 @app.post("/webhook")
 async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     texto = Body.strip()
     numero_usuario = From.replace("whatsapp:", "") 
     
-    # --- Consultar a Dialogflow ---
+    # Consultar a Dialogflow
     intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_usuario, texto)
     print(f"La IA detectó la intención: {intencion}")
     
-    # --- REGISTRO EN SUPABASE ---
+    # --- REGISTRO DE LEAD Y LOG EN SUPABASE ---
     try:
-        # -- Verificar si el usuario es nuevo y registrarlo --
+        # A. Registrar usuario si no existe
         usuario = supabase.table("usuarios").select("telefono").eq("telefono", numero_usuario).execute()
         if not usuario.data:
             supabase.table("usuarios").insert({"telefono": numero_usuario}).execute()
-            print("Nuevo lead registrado en la tabla usuarios.")
 
-        # -- Guardar la interacción vinculada al usuario --
+        # B. Registrar la interacción general
         supabase.table("interacciones").insert({
             "telefono": numero_usuario,
             "mensaje": texto,
@@ -65,12 +64,14 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
         }).execute()
         
     except Exception as e:
-        print(f"Error al guardar en Supabase: {e}")
+        print(f"Error al guardar logs en Supabase: {e}")
 
+    # Variables de respuesta por defecto
     response_text = ""
     media_url = None 
 
-    # --- 4. ÁRBOL DE DECISIONES Y LÓGICA DE NEGOCIO ---
+    # --- 4. ÁRBOL DE DECISIONES Y LÓGICA ---
+    
     if intencion == "Default Welcome Intent":
         response_text = (
             "¡Hola! Bienvenido al asistente virtual del Instituto Wissen. 🤖📚\n\n"
@@ -80,7 +81,8 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "2️⃣ Información sobre una carrera específica\n"
             "3️⃣ Cursos de Educación Continua\n"
             "4️⃣ Iniciar mi proceso de matrícula\n"
-            "5️⃣ Hablar con un asesor humano"
+            "5️⃣ Hablar con un asesor humano\n"
+            "6️⃣ Solicitar un Certificado o Retiro"
         )
 
     elif intencion == "Menu.Oferta" or texto == "1":
@@ -150,6 +152,47 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "He notificado a nuestro equipo de admisiones. Un asesor humano leerá tu historial y se contactará contigo por este mismo chat en breve.\n\n"
             "(Horario de atención: Lunes a Viernes, 08:00 a 17:00)"
         )
+
+
+    elif intencion == "Tramite.Certificados":
+        response_text = (
+            "📜 *Proceso para Petición de Emisión de Certificados:*\n\n"
+            "Sigue estos pasos en tu portal:\n"
+            "1. Ingresa al sistema *SGA*.\n"
+            "2. Busca la opción *'Solicitudes Institucionales'* y escoge el tipo de solicitud.\n"
+            "3. Realiza el pago (si aplica), sube el comprobante en 'Seleccione un archivo' y da clic en Guardar.\n"
+            "4. Descarga la plantilla de formato del certificado deseado.\n"
+            "5. Llena todos los datos, fírmala y súbela en 'Seleccione archivo'.\n\n"
+            "✅ *He abierto un ticket de seguimiento para tu solicitud en nuestro sistema.*"
+        )
+        try:
+            supabase.table("tramites").insert({
+                "telefono": numero_usuario,
+                "tipo_tramite": "Emisión de Certificado",
+                "estado": "Pendiente"
+            }).execute()
+        except Exception as e:
+            print(f"Error guardando ticket: {e}")
+
+    elif intencion == "Tramite.Retiros":
+        response_text = (
+            "⚠️ *Proceso para Retiro de Asignatura:*\n\n"
+            "Sigue estos pasos cuidadosamente:\n"
+            "1. Ingresa al sistema *SGA*.\n"
+            "2. Busca la opción *'Solicitudes Institucionales'* y elige tu solicitud.\n"
+            "3. Realiza el pago correspondiente, sube el comprobante y da clic en Guardar.\n"
+            "4. Descarga la *plantilla de formato* para retiro.\n"
+            "5. Llena tus datos, fírmala y súbela en 'Seleccione archivo'.\n\n"
+            "✅ *He notificado a secretaría y he abierto un ticket para tu retiro.*"
+        )
+        try:
+            supabase.table("tramites").insert({
+                "telefono": numero_usuario,
+                "tipo_tramite": "Retiro de Asignatura",
+                "estado": "Pendiente"
+            }).execute()
+        except Exception as e:
+            print(f"Error guardando ticket: {e}")
 
     else:
         response_text = (
