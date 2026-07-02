@@ -163,16 +163,8 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "3. Realiza el pago (si aplica), sube el comprobante en 'Seleccione un archivo' y da clic en Guardar.\n"
             "4. Descarga la plantilla de formato del certificado deseado.\n"
             "5. Llena todos los datos, fírmala y súbela en 'Seleccione archivo'.\n\n"
-            "✅ *He abierto un ticket de seguimiento para tu solicitud en nuestro sistema.*"
+            "👉 *Nota:* En la misma pantalla del SGA podrás revisar el estado de tu solicitud."
         )
-        try:
-            supabase.table("tramites").insert({
-                "telefono": numero_usuario,
-                "tipo_tramite": "Emisión de Certificado",
-                "estado": "Pendiente"
-            }).execute()
-        except Exception as e:
-            print(f"Error guardando ticket: {e}")
 
     elif intencion == "Tramite.Retiros":
         response_text = (
@@ -183,16 +175,8 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "3. Realiza el pago correspondiente, sube el comprobante y da clic en Guardar.\n"
             "4. Descarga la *plantilla de formato* para retiro.\n"
             "5. Llena tus datos, fírmala y súbela en 'Seleccione archivo'.\n\n"
-            "✅ *He notificado a secretaría y he abierto un ticket para tu retiro.*"
+            "👉 *Nota:* En la misma pantalla del SGA podrás revisar si tu retiro fue aprobado."
         )
-        try:
-            supabase.table("tramites").insert({
-                "telefono": numero_usuario,
-                "tipo_tramite": "Retiro de Asignatura",
-                "estado": "Pendiente"
-            }).execute()
-        except Exception as e:
-            print(f"Error guardando ticket: {e}")
 
     else:
         response_text = (
