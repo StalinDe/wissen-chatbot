@@ -96,7 +96,6 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "3️⃣ Cursos de Educación Continua\n"
             "4️⃣ Iniciar mi proceso de matrícula\n"
             "5️⃣ Hablar con un asesor humano\n"
-            "6️⃣ Solicitar un Certificado o Retiro"
         )
         
         twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -127,7 +126,6 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
             "3️⃣ Cursos de Educación Continua\n"
             "4️⃣ Iniciar mi proceso de matrícula\n"
             "5️⃣ Hablar con un asesor humano\n"
-            "6️⃣ Solicitar un Certificado o Retiro"
         )
 
     elif intencion == "Menu.Oferta" or texto == "1":
