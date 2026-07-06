@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.cloud import dialogflow
 import uvicorn
+import re
 
 # --- 1. CONFIGURACIÓN INICIAL Y ENTORNO ---
 load_dotenv()
@@ -45,30 +46,74 @@ async def twilio_webhook(Body: str = Form(...), From: str = Form(...)):
     texto = Body.strip()
     numero_usuario = From.replace("whatsapp:", "") 
     
-    # Consultar a Dialogflow
+    response_text = ""
+    media_url = None 
+
+    usuario = supabase.table("usuarios").select("*").eq("telefono", numero_usuario).execute()
+    
+    if not usuario.data:
+        supabase.table("usuarios").insert({
+            "telefono": numero_usuario,
+            "estado_embudo": "Pendiente_Datos"
+        }).execute()
+        
+        response_text = (
+            "¡Hola! Bienvenido al asistente virtual del Instituto Wissen. 🤖📚\n\n"
+            "⚖️ *Aviso Legal:* Al continuar, autorizas al Instituto Wissen el tratamiento de tus datos personales según la LOPDP.\n\n"
+            "Para brindarte una atención personalizada, por favor escribe tu *Nombre Completo y Número de Cédula* (Ej. Juan Pérez 0102030405).\n\n"
+        )
+        
+        twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response><Message>{response_text}</Message></Response>"""
+        return Response(content=twiml_response, media_type="application/xml")
+
+    elif usuario.data[0].get("estado_embudo") == "Pendiente_Datos":
+        if texto.upper() == "OMITIR":
+            supabase.table("usuarios").update({
+                "nombre_completo": "Omitido",
+                "cedula": "Omitido",
+                "estado_embudo": "Prospecto"
+            }).eq("telefono", numero_usuario).execute()
+        else:
+            numeros = re.findall(r'\d+', texto)
+            cedula_extraida = "".join(numeros) if numeros else "No especificada"
+            
+            letras = re.sub(r'\d+', '', texto).strip()
+            nombre_extraido = letras if letras else "No especificado"
+
+            supabase.table("usuarios").update({
+                "nombre_completo": nombre_extraido,
+                "cedula": cedula_extraida,
+                "nombre_cedula": texto, 
+                "estado_embudo": "Prospecto"
+            }).eq("telefono", numero_usuario).execute()
+            
+        response_text = (
+            "¡Gracias! Registro completado con éxito. ✅\n\n"
+            "¿En qué te puedo ayudar hoy? Escribe el número de tu opción o dímelo con tus palabras:\n\n"
+            "1️⃣ Conocer la oferta académica\n"
+            "2️⃣ Información sobre una carrera\n"
+            "3️⃣ Cursos de Educación Continua\n"
+            "4️⃣ Iniciar mi proceso de matrícula\n"
+            "5️⃣ Hablar con un asesor humano\n"
+            "6️⃣ Solicitar un Certificado o Retiro"
+        )
+        
+        twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response><Message>{response_text}</Message></Response>"""
+        return Response(content=twiml_response, media_type="application/xml")
+
     intencion = detectar_intencion(DIALOGFLOW_PROJECT_ID, numero_usuario, texto)
     print(f"La IA detectó la intención: {intencion}")
     
-    # --- REGISTRO DE LEAD Y LOG EN SUPABASE ---
     try:
-        # A. Registrar usuario si no existe
-        usuario = supabase.table("usuarios").select("telefono").eq("telefono", numero_usuario).execute()
-        if not usuario.data:
-            supabase.table("usuarios").insert({"telefono": numero_usuario}).execute()
-
-        # B. Registrar la interacción general
         supabase.table("interacciones").insert({
             "telefono": numero_usuario,
             "mensaje": texto,
             "intencion": intencion
         }).execute()
-        
     except Exception as e:
-        print(f"Error al guardar logs en Supabase: {e}")
-
-    # Variables de respuesta por defecto
-    response_text = ""
-    media_url = None 
+        print(f"Error al guardar log: {e}")
 
     # --- 4. ÁRBOL DE DECISIONES Y LÓGICA ---
     
